@@ -389,6 +389,12 @@ class HTTP11Connection(object):
 
                 return
 
+            # Case for strings.
+            elif isinstance(body, str):
+                self._sock.send(body.encode('utf-8'))
+
+                return
+
             # Iterables that set a specific content length.
             elif isinstance(body, collections.Iterable):
                 for item in body:
