@@ -79,6 +79,10 @@ class HTTP11Connection(object):
         self.ssl_context = ssl_context
         self._sock = None
 
+        # Keep the current request method in order to be able to know
+        # in get_response() what was the request verb.
+        self._current_request_method = None
+
         # Setup proxy details if applicable.
         if proxy_host:
             if proxy_port is None:
@@ -153,6 +157,7 @@ class HTTP11Connection(object):
         headers = headers or {}
 
         method = to_bytestring(method)
+        self._current_request_method = method
         url = to_bytestring(url)
 
         if not isinstance(headers, HTTPHeaderMap):
@@ -195,6 +200,9 @@ class HTTP11Connection(object):
         This is an early beta, so the response object is pretty stupid. That's
         ok, we'll fix it later.
         """
+        method = self._current_request_method
+        self._current_request_method = None
+
         headers = HTTPHeaderMap()
 
         response = None
@@ -208,8 +216,14 @@ class HTTP11Connection(object):
 
         self._sock.advance_buffer(response.consumed)
 
+        # Check for a successful "switching protocols to h2c" response.
+        # "Connection: upgrade" is not strictly necessary on the receiving end,
+        # but we want to fail fast on broken servers or intermediaries:
+        # https://github.com/Lukasa/hyper/issues/312.
+        # Connection options are case-insensitive, while upgrade tokens are
+        # case-sensitive: https://github.com/httpwg/http11bis/issues/8.
         if (response.status == 101 and
-                b'upgrade' in headers['connection'] and
+                b'upgrade' in map(bytes.lower, headers['connection']) and
                 H2C_PROTOCOL.encode('utf-8') in headers['upgrade']):
             raise HTTPUpgrade(H2C_PROTOCOL, self._sock)
 
@@ -218,7 +232,8 @@ class HTTP11Connection(object):
             response.msg.tobytes(),
             headers,
             self._sock,
-            self
+            self,
+            method
         )
 
     def _send_headers(self, method, url, headers):
@@ -291,6 +306,12 @@ class HTTP11Connection(object):
             # Case for bytestrings.
             elif isinstance(body, bytes):
                 self._sock.send(body)
+
+                return
+
+            # Case for strings.
+            elif isinstance(body, str):
+                self._sock.send(body.encode('utf-8'))
 
                 return
 
@@ -371,7 +392,8 @@ class HTTP11Connection(object):
         .. warning:: This method should absolutely only be called when you are
                      certain the connection object is no longer needed.
         """
-        self._sock.close()
+        if self._sock is not None:
+            self._sock.close()
         self._sock = None
 
     # The following two methods are the implementation of the context manager
