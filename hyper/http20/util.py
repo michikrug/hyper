@@ -57,4 +57,8 @@ def h2_safe_headers(headers):
     }
     stripped.add(b'connection')
 
-    return [header for header in headers if header[0] not in stripped]
+    if hasattr(headers, 'iter_raw'):
+    	iter_raw = headers.iter_raw()
+    else:
+        iter_raw = headers
+    return [header for header in iter_raw if header[0] not in stripped]

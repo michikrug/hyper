@@ -270,6 +270,8 @@ class HTTP20Connection(object):
             # Convert the body to bytes if needed.
             if body and isinstance(body, (unicode, bytes)):
                 body = to_bytestring(body)
+                if 'Transfer-Encoding' not in headers:
+                    self.putheader('Content-Length', str(len(body)))
 
             self.endheaders(message_body=body, final=True, stream_id=stream_id)
 
@@ -505,7 +507,8 @@ class HTTP20Connection(object):
         # ":path". We can set all of these now.
         s.add_header(":method", method)
         s.add_header(":scheme", "https" if self.secure else "http")
-        s.add_header(":authority", self.host)
+        port = "" if ((self.secure and self.port == 443) or (not self.secure and self.port == 80)) else (":" + str(self.port))
+        s.add_header(":authority", self.host + port)
         s.add_header(":path", selector)
 
         # Save the stream.
