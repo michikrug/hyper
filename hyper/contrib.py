@@ -107,6 +107,7 @@ class HTTP20Adapter(HTTPAdapter):
 
         # Build the selector.
         selector = parsed.path
+        selector += ';' + parsed.params if parsed.params else ''
         selector += '?' + parsed.query if parsed.query else ''
         selector += '#' + parsed.fragment if parsed.fragment else ''
 
